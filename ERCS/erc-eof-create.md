@@ -38,6 +38,22 @@ pragma solidity >=0.8.21 <0.10.0;
  * @author Ricardo Guilherme Schmidt (Status Research & Development GmbH)
  */
 contract EOFSingletonFactory {
+
+    address private immutable original;
+
+    constructor() {
+        original = address(this);
+    }
+
+    function checkNotDelegateCall() private view {
+        require(address(this) == original, "Execution is a delegatecall");
+    }
+
+    modifier noDelegateCall() {
+        checkNotDelegateCall();
+        _;
+    }
+
     /**
      * @notice Deploys EOF container identified by `_codeHash` using `_salt` for defining the
      *         deterministic address.
@@ -47,7 +63,7 @@ contract EOFSingletonFactory {
      * @revert Reverts with parent revert data if contract create failed
      */
     function deploy(bytes32 _codeHash, bytes32 _salt)
-    public
+    public noDelegateCall
     returns (address payable createdContract)
     {
         assembly {
@@ -78,21 +94,33 @@ pragma solidity >=0.8.21 <0.10.0;
  */
 contract EOFUnsaltedFactory {
 
-    mapping(bytes32 => uint256) nonces;
+    address private immutable original;
+
+    constructor() {
+        original = address(this);
+    }
+
+    function checkNotDelegateCall() private view {
+        require(address(this) == original, "Execution is a delegatecall");
+    }
+
+    modifier noDelegateCall() {
+        checkNotDelegateCall();
+        _;
+    }
 
     /**
      * @notice Deploys EOF container identified by `_codeHash` to a new address
      * @param _codeHash The code hash used by TXCREATE.
      * @return createdContract Created contract address.
-     * @revert Reverts with parent revert data if contract create failed     
      */
     function deploy(bytes32 _codeHash)
-    public
+    public noDelegateCall
     returns (address payable createdContract)
     {
-        uint256 salt = nonces[_codeHash];
-        nonces[_codeHash] = salt + 1;
         assembly {
+            let salt := add(sload(_codeHash), 1)
+            sstore(_codeHash, salt)
             createdContract := txcreate(_codeHash, 0, salt, 0, 0)
             if iszero(createdContract) {
                 returndatacopy(0, 0, returndatasize())
@@ -107,10 +135,12 @@ contract EOFUnsaltedFactory {
      * @return nonce the next nonce.
      */
     function nonceFor(bytes32 _codeHash)
-    public view
+    public view noDelegateCall
     returns (uint256 nonce)
     {
-        nonce = nonces[_codeHash];
+        assembly {
+            nonce := sload(_codeHash)
+        }
     }
 }
 ```
@@ -128,15 +158,30 @@ pragma solidity >=0.8.21 <0.10.0;
  * @author Danno Ferrin
  */
 contract EOFCounterfactualFactory {
+    
+    address private immutable original;
+
+    constructor() {
+        original = address(this);
+    }
+
+    function checkNotDelegateCall() private view {
+        require(address(this) == original, "Execution is a delegatecall");
+    }
+
+    modifier noDelegateCall() {
+        checkNotDelegateCall();
+        _;
+    }
 
     /**
-     * @notice Deploys EOF container identified by `_codeHash` to a new address
+    * @notice Deploys EOF container identified by `_codeHash` to a new address
      * @param _codeHash The code hash used by TXCREATE.
      * @return createdContract Created contract address.
      * @revert Reverts with parent revert data if contract create failed
      */
     function deploy(bytes32 _codeHash)
-    public
+    public noDelegateCall
     returns (address payable createdContract)
     {
         assembly {
