@@ -44,6 +44,7 @@ contract EOFSingletonFactory {
      * @param _codeHash The code hash used by TXCREATE.
      * @param _salt Arbitrary value to modify resulting address.
      * @return createdContract Created contract address.
+     * @revert Reverts with parent revert data if contract create failed
      */
     function deploy(bytes32 _codeHash, bytes32 _salt)
     public
@@ -51,6 +52,11 @@ contract EOFSingletonFactory {
     {
         assembly {
             createdContract := txcreate(_codeHash, 0, _salt, 0, 0)
+            //TODO trigger off of zero contract or non-zero returndata?
+            if iszero(createdContract) {
+                returndatacopy(0, 0, returndatasize())
+                revert(0, returndatasize())
+            }
         }
     }
 }
@@ -78,6 +84,7 @@ contract EOFUnsaltedFactory {
      * @notice Deploys EOF container identified by `_codeHash` to a new address
      * @param _codeHash The code hash used by TXCREATE.
      * @return createdContract Created contract address.
+     * @revert Reverts with parent revert data if contract create failed     
      */
     function deploy(bytes32 _codeHash)
     public
@@ -87,6 +94,10 @@ contract EOFUnsaltedFactory {
         nonces[_codeHash] = salt + 1;
         assembly {
             createdContract := txcreate(_codeHash, 0, salt, 0, 0)
+            if iszero(createdContract) {
+                returndatacopy(0, 0, returndatasize())
+                revert(0, returndatasize())
+            }
         }
     }
 
@@ -122,6 +133,7 @@ contract EOFCounterfactualFactory {
      * @notice Deploys EOF container identified by `_codeHash` to a new address
      * @param _codeHash The code hash used by TXCREATE.
      * @return createdContract Created contract address.
+     * @revert Reverts with parent revert data if contract create failed
      */
     function deploy(bytes32 _codeHash)
     public
@@ -129,6 +141,10 @@ contract EOFCounterfactualFactory {
     {
         assembly {
             createdContract := txcreate(_codeHash, 0, _codeHash, 0, 0)
+            if iszero(createdContract) {
+                returndatacopy(0, 0, returndatasize())
+                revert(0, returndatasize())
+            }
         }
     }
 }
