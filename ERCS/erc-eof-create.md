@@ -22,46 +22,13 @@ Cross-chain address reuse is predicated on well known toehold contracts providin
 
 ## Specification
 
-### EOF Singleton Factory
+Full source code for the contracts can be found in the [ERC-TBD assets](../assets/erc-eof-create) directory.  The ERC will discuss the most pertinent sections 
 
-> This is heavily inspired by [ERC-2470]'s singleton contract.
+### [EOF Singleton Factory](../assets/erc-eof-create/EOFSingletonFactory.sol)
+
+This is heavily inspired by [ERC-2470]'s singleton contract. One needed change is we set input data to empty.  The call to `deploy` also reverts if no valid contract address is returned.
 
 ```solidity
-/// SPDX-License-Identifier: CC0-1.0
-pragma solidity >=0.8.21 <0.10.0;
-
-/**
- * @title EOF Singleton Factory (ERC-TBD)
- * @notice Exposes TXCREATE (EIP-1014) to deploy EOF contracts on deterministic addresses based on 
- *         the EOF init container and salt.
- * @author Danno Ferrin
- * @author Ricardo Guilherme Schmidt (Status Research & Development GmbH)
- */
-contract EOFSingletonFactory {
-
-    address private immutable original;
-
-    constructor() {
-        original = address(this);
-    }
-
-    function checkNotDelegateCall() private view {
-        require(address(this) == original, "Execution is a delegatecall");
-    }
-
-    modifier noDelegateCall() {
-        checkNotDelegateCall();
-        _;
-    }
-
-    /**
-     * @notice Deploys EOF container identified by `_codeHash` using `_salt` for defining the
-     *         deterministic address.
-     * @param _codeHash The code hash used by TXCREATE.
-     * @param _salt Arbitrary value to modify resulting address.
-     * @return createdContract Created contract address.
-     * @revert Reverts with parent revert data if contract create failed
-     */
     function deploy(bytes32 _codeHash, bytes32 _salt)
     public noDelegateCall
     returns (address payable createdContract)
@@ -75,45 +42,13 @@ contract EOFSingletonFactory {
             }
         }
     }
-}
 ```
 
-### EOF Unsalted Factory
+### [EOF Unsalted Factory](../assets/erc-eof-create/EOFUnsaltedFactory.sol)
 
-> The current nonce is  unique per code hash, so each subsequent deployment address is independent of other contract interactions.
+Instead of accepting an external salt a monononically increasing nonce is used.  This nonce is stored per-code hash so other contract deployments don't interact. The nonces are stored via a direct indexed in storage.  a `noncesFor` method is provided to query the current nonce. Because of this the `noDelegateCall` modifier applies to all methods of all contracts.
 
 ```solidity
-/// SPDX-License-Identifier: CC0-1.0
-pragma solidity >=0.8.21 <0.10.0;
-
-/**
- * @title EOF Singleton Factory (ERC-TBD)
- * @notice Exposes TXCREATE (EIP-1014) to deploy EOF contracts on deterministic addresses based on
- *         the EOF init container a per-contract incrementing nonce.
- * @author Danno Ferrin
- */
-contract EOFUnsaltedFactory {
-
-    address private immutable original;
-
-    constructor() {
-        original = address(this);
-    }
-
-    function checkNotDelegateCall() private view {
-        require(address(this) == original, "Execution is a delegatecall");
-    }
-
-    modifier noDelegateCall() {
-        checkNotDelegateCall();
-        _;
-    }
-
-    /**
-     * @notice Deploys EOF container identified by `_codeHash` to a new address
-     * @param _codeHash The code hash used by TXCREATE.
-     * @return createdContract Created contract address.
-     */
     function deploy(bytes32 _codeHash)
     public noDelegateCall
     returns (address payable createdContract)
@@ -128,58 +63,13 @@ contract EOFUnsaltedFactory {
             }
         }
     }
-
-    /**
-     * @notice return the next nonce for a particular contract hash
-     * @param _codeHash The code hash used by TXCREATE.
-     * @return nonce the next nonce.
-     */
-    function nonceFor(bytes32 _codeHash)
-    public view noDelegateCall
-    returns (uint256 nonce)
-    {
-        assembly {
-            nonce := sload(_codeHash)
-        }
-    }
-}
 ```
 
-### EOF Counterfactual Factory
+### [EOF Counterfactual Factory](../assets/erc-eof-create/EOFCounterfactualFactory.sol)
+
+The counterfactual contract highly similar to the singleton contract, except that only the code hash can be used as the salt. To differentiate instances the data stored in the EOF data section (which is part of the input to the code has) should be updated.
 
 ```solidity
-/// SPDX-License-Identifier: CC0-1.0
-pragma solidity >=0.8.21 <0.10.0;
-
-/**
- * @title EOF Counterfactual Factory (ERC-TBD)
- * @notice Exposes TXCREATE (EIP-1014) to deploy EOF contracts on deterministic addresses without
- *         salt.
- * @author Danno Ferrin
- */
-contract EOFCounterfactualFactory {
-    
-    address private immutable original;
-
-    constructor() {
-        original = address(this);
-    }
-
-    function checkNotDelegateCall() private view {
-        require(address(this) == original, "Execution is a delegatecall");
-    }
-
-    modifier noDelegateCall() {
-        checkNotDelegateCall();
-        _;
-    }
-
-    /**
-    * @notice Deploys EOF container identified by `_codeHash` to a new address
-     * @param _codeHash The code hash used by TXCREATE.
-     * @return createdContract Created contract address.
-     * @revert Reverts with parent revert data if contract create failed
-     */
     function deploy(bytes32 _codeHash)
     public noDelegateCall
     returns (address payable createdContract)
@@ -192,7 +82,6 @@ contract EOFCounterfactualFactory {
             }
         }
     }
-}
 ```
 
 
@@ -201,7 +90,7 @@ contract EOFCounterfactualFactory {
 Deployment is a process involving three transactions.  The first transaction deploys the Counterfactual Factory using an [EIP-7698] EOF creation transaction.
 
 ```
-//deployment byes goes here
+//deployment bytes goes here
 ```
 
 The next two transaction can be done by any account, and use [EIP-TBD] TXCREATE transactions through the Counterfactual Factory.
@@ -215,44 +104,11 @@ The next two transaction can be done by any account, and use [EIP-TBD] TXCREATE 
 
 ### Deployment Method
 
-The contracts are deployed via a combination of the keyless deployment method---also known as [Nick]'s method---which relies on a single-use address, to create a toehold contract and then using this toehold to deploy the other two contracts. 
-
-(See [Nick's article] for more details). This method works as follows:
-
-1. Generate a transaction which deploys the contract from a new random account.
-   - This transaction MUST NOT use [EIP-155] in order to work on any chain.
-   - This transaction MUST have a relatively high gas price to be deployed on any chain. In this case, it is going to be 100 Gwei.
-
-2. Forge a transaction with the following parameters:
-    ```js
-    {
-        nonce: 0,
-        gasPrice: 100000000000,
-        value: 0,
-        data: '//FIXME',
-        gasLimit: 247000,
-        v: 27,
-        r: '0x247000',
-        s: '0x2470'
-    }
-    ```
-   > The `r` and `s` values, made of starting `2470`, are obviously a human determined value, instead of a real signature.
-
-3. We recover the sender of this transaction, i.e., the single-use deployment account.
-
-   > Thus, we obtain an account that can broadcast that transaction, but we also have the warranty that nobody knows the private key of that account.
-
-4. Send exactly 0.0247 ether to this single-use deployment account.
-
-5. Broadcast the deployment transaction.
-
-   > Note: 247000 is the double of gas needed to deploy the smart contract, this ensures that future changes in OPCODE pricing are unlikely to cause this deploy transaction to fail out of gas. A left over will sit in the address of about 0.01 ETH will be forever locked in the single use address.
-
-The resulting transaction hash is `//TBD`.
+The contracts are deployed via a combination of the keyless deployment method---also known as [Nick]'s method---which relies on a single-use address, to create a toehold contract and then using this toehold to deploy the other two contracts. (See [Nick's article] for more details). 
 
 This operation can be done on any chain, guaranteeing that the contract address is always the same and nobody can use that address with a different contract.
 
-Once the Counterfactual Factory is deployed then it can be used to deploy the other two contracts to deterministic addresses based on that toehold. 
+The Counterfactual Factory will be deployed via the keyless deployment method first. In two subsequent transactions it will be used to deploy the other two contracts to deterministic addresses based on that toehold address.
 
 ### Single-use Factory Deployment Account
 
@@ -391,13 +247,14 @@ TBD
 
 ## Implementation
 
-//TBD 
+Source code for the solidity contracts is in the [ERC-TBD Assets](../assets/erc-eof-create).
 
 ## Security Considerations
 
 * Some contracts can possibly not support being deployed on any chain, or require a different address per chain, that can be safely verified using the CHAINID Opcode ([EIP-1344]) in the constructor.
 * Account contracts are singletons in the point of view of each user, when wallets want to signal what chain id is intended, [ERC-1191] should be used.
 * Contracts deployed on factory must not use `msg.sender` in constructor, instead use constructor parameters, otherwise the factory would end up being the controller/only owner of those.
+* External contracts may attempt to use the facilities via chained delegate calls to access and manipulate data that the contract at the original address hasn't intended to be shared as well as use the creation facilities with a different source address. To proactively prevent such problems all functions have code preventing use via DELEGATECALL and EXTDELEGATECALL. Contracts wishing to use this functionality at different address are free to include the source code in their own contracts without restriction.
 
 ## Copyright
 Copyright and related rights waived via [CC0](../LICENSE.md).
